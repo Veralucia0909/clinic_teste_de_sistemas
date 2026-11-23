@@ -1,0 +1,754 @@
+import express, {
+  json,
+  type Express,
+  type Request,
+  type Response,
+} from "express";
+import { db } from "./prisma/db";
+import bcrypt from "bcrypt";
+import { signTokenAcesso, signTokenRefresh, verificarToken } from "./utils/jwt";
+import cors from "cors";
+import { auth } from "./middleware/auth";
+import { criarEstoqueService } from "./estoque/estoque.service";
+import { criarRotasEstoque } from "./estoque/estoque.routes";
+import { estoqueRepositoryPrisma } from "./estoque/estoque.repository";
+
+const app: Express = express();
+app.use(json());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  }),
+);
+
+app.get("/renovar-token", async (req: Request, res: Response) => {
+  try {
+    const refreshToken = req.query.token as string;
+    console.log(refreshToken);
+    const tokenBanco = await db.orm.public.Token.where({
+      token: refreshToken,
+    }).first();
+    if (tokenBanco?.revoked)
+      return res.status(401).json({ error: "revoked token" });
+
+    const payload = verificarToken(refreshToken);
+    if (!payload)
+      return res.status(401).json({
+        error: "invalid token",
+      });
+    const usuario = await db.orm.public.User.where({
+      id: tokenBanco?.usuarioId,
+    }).first();
+    if (!usuario)
+      return res.status(401).json({
+        error: "user not found",
+      });
+
+    const tokenAcesso = signTokenAcesso({
+      nome: usuario.name,
+      email: usuario.email,
+    });
+
+    const acessoExpiraEm = new Date();
+    const acessoExpiraEm5Minutos = acessoExpiraEm.setMinutes(
+      acessoExpiraEm.getMinutes() + 5,
+    );
+    await db.orm.public.Token.create({
+      token: tokenAcesso,
+      type: "ACESSO",
+      revoked: false,
+      usuarioId: usuario.id,
+      expiresAt: new Date(acessoExpiraEm5Minutos).toISOString(),
+    });
+    return res.status(200).json({
+      message: "Token de acesso renovado!",
+      data: {
+        tokenAcesso,
+        refreshToken,
+        idUsuario: usuario.id,
+      },
+    });
+  } catch (erro: any) {
+    if (erro?.name === "TokenExpiredError") {
+      return res.status(401).json({
+        error: "expired refresh token",
+      });
+    }
+    return res.status(401).json({
+      error: "invalid token",
+    });
+  }
+});
+
+app.post("/login", async (req: Request, res: Response) => {
+  const body = req.body;
+  const existeUsuario = await db.orm.public.User.where({
+    email: body.email,
+  }).first();
+  if (existeUsuario) {
+    const senha = body.password;
+    const senhaCorreta = await bcrypt.compare(senha, existeUsuario.password);
+    if (senhaCorreta) {
+      const tokenAcesso = signTokenAcesso({
+        nome: existeUsuario.name,
+        email: existeUsuario.email,
+      });
+      const tokenRefresh = signTokenRefresh({
+        nome: existeUsuario.name,
+        email: existeUsuario.email,
+      });
+
+      const acessoExpiraEm = new Date();
+      const acessoExpiraEm5Minutos = acessoExpiraEm.setMinutes(
+        acessoExpiraEm.getMinutes() + 5,
+      );
+      await db.orm.public.Token.create({
+        token: tokenAcesso,
+        type: "ACESSO",
+        revoked: false,
+        usuarioId: existeUsuario.id,
+        expiresAt: new Date(acessoExpiraEm5Minutos).toISOString(),
+      });
+
+      const refreshExpiraEm = new Date();
+      const refreshExpiraEm1Dia = refreshExpiraEm.setHours(
+        refreshExpiraEm.getHours() + 24,
+      );
+      await db.orm.public.Token.create({
+        token: tokenRefresh,
+        type: "REFRESH",
+        revoked: false,
+        usuarioId: existeUsuario.id,
+        expiresAt: new Date(refreshExpiraEm1Dia).toISOString(),
+      });
+
+      return res.status(200).json({
+        message: "Usuário logado!",
+        data: {
+          tokenAcesso,
+          tokenRefresh,
+          idUsuario: existeUsuario.id,
+        },
+      });
+    }
+    return res.status(401).json({ message: "Senha incorreta!" });
+  }
+  return res.status(401).json({ message: "Usuário não encontrado!" });
+});
+
+app.post("/cadastro", async (req: Request, res: Response) => {
+  const body = req.body;
+  const hashSenha = await bcrypt.hash(body.password, 10);
+
+  const usuario = await db.orm.public.User.create({
+    email: body.email,
+    name: body.name,
+    password: hashSenha,
+    username: body.username,
+  });
+
+  res.json({
+    mensagem: "Usuário Criado!",
+    data: usuario.id,
+  });
+});
+
+app.put("/logout/:id", async (req: Request, res: Response) => {
+  const idUsuario = Number(req.params.id);
+  const usuario = await db.orm.public.User.where({ id: idUsuario }).first();
+
+  if (usuario) {
+    await db.orm.public.Token.where({
+      usuarioId: idUsuario,
+      revoked: false,
+    }).updateAll({
+      revoked: true,
+    });
+
+    return res.json({
+      mensagem: "Usuário deslogado com sucesso!",
+    });
+  }
+  return res.status(400).send("Usuário não encontrado!");
+});
+
+app.get("/usuarios", async (_: Request, res: Response) => {
+  const users = await db.orm.public.User.select(
+    "id",
+    "username",
+    "email",
+  ).all();
+
+  res.json(users);
+});
+
+app.use(auth);
+
+app.get("/usuarios/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const usuario = await db.orm.public.User.where({ id }).first();
+  if (usuario) {
+    return res.json(usuario);
+  }
+
+  return res.status(400).send("Usuário não existe!");
+});
+
+app.post("/usuario", async (req: Request, res: Response) => {
+  const body = req.body;
+  const hashSenha = await bcrypt.hash(body.password, 10);
+
+  const usuario = await db.orm.public.User.create({
+    email: body.email,
+    name: body.name,
+    password: hashSenha,
+    username: body.username,
+  });
+
+  res.json({
+    mensagem: "Usuário Criado!",
+    data: usuario,
+  });
+});
+
+app.put("/usuarios/:id", async (req: Request, res: Response) => {
+  const body = req.body;
+  const id = Number(req.params.id);
+
+  const hashSenha = await bcrypt.hash(body.password, 10);
+  const usuario = await db.orm.public.User.where({ id }).update({
+    email: body.email,
+    name: body.name,
+    password: hashSenha,
+    username: body.username,
+  });
+  if (usuario) {
+    return res.json({
+      mensagem: "Usuário atualizado com sucesso!",
+      data: usuario,
+    });
+  }
+  return res.status(400).send("Usuário não encontrado!");
+});
+
+app.delete("/usuarios/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const usuario = await db.orm.public.User.where({ id }).delete();
+  if (usuario) {
+    res.json({
+      mensagem: "Usuário deletado",
+      data: usuario,
+    });
+  } else {
+    res.status(400).send("Usuário não existe!");
+  }
+});
+
+app.get("/exames", async (req: Request, res: Response) => {
+  const pagina = Number(req.query.pagina);
+  const limite = Number(req.query.limite) || 10;
+  const exames = await db.orm.public.Exame.select(
+    "id",
+    "tipo_exame",
+    "valor",
+    "descricao",
+    "resultado",
+    "data_exame",
+  )
+    .orderBy([(e) => e.data_exame.desc(), (e) => e.id.desc()])
+    .limit(limite)
+    .offset((pagina - 1) * limite)
+    .all();
+
+  const totalExames = await db.orm.public.Exame.aggregate((exame) => ({
+    total: exame.count(),
+  }));
+  const totalPaginas = Math.ceil(totalExames.total / limite);
+
+  res.json({
+    exames,
+    totalExames: totalExames.total,
+    totalPaginas,
+    paginaAtual: pagina,
+  });
+});
+
+app.get("/exames/tipo/:tipo_exame", async (req: Request, res: Response) => {
+  const tipo_exame = req.params.tipo_exame;
+  const exames = await db.orm.public.Exame.where((e) =>
+    e.tipo_exame.ilike(`%${tipo_exame}%`),
+  )
+    .select(
+      "id",
+      "tipo_exame",
+      "valor",
+      "descricao",
+      "resultado",
+      "data_exame",
+      "paciente_id",
+    )
+    .all();
+
+  res.json(exames);
+});
+
+app.get("/exames/paciente/:nome", async (req: Request, res: Response) => {
+  const nome = req.params.nome;
+  const exames = await db.orm.public.Exame.where((e) =>
+    e.paciente.some((p) => p.nome.ilike(`%${nome}%`)),
+  )
+    .select(
+      "id",
+      "tipo_exame",
+      "valor",
+      "descricao",
+      "resultado",
+      "data_exame",
+      "paciente_id",
+    )
+    .all();
+
+  res.json(exames);
+});
+
+app.get("/exames/data/:data", async (req: Request, res: Response) => {
+  const data = req.params.data;
+  const inicio = new Date(`${data}T00:00:00.000Z`);
+  if (isNaN(inicio.getTime())) return res.status(400).send("Data inválida!");
+
+  const fim = new Date(inicio);
+  fim.setUTCDate(fim.getUTCDate() + 1);
+
+  const exames = await db.orm.public.Exame.where((e) =>
+    e.data_exame.gte(inicio.toISOString()),
+  )
+    .where((e) => e.data_exame.lt(fim.toISOString()))
+    .select(
+      "id",
+      "tipo_exame",
+      "valor",
+      "descricao",
+      "resultado",
+      "data_exame",
+      "paciente_id",
+    )
+    .all();
+
+  res.json(exames);
+});
+
+app.get("/exames/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const exame = await db.orm.public.Exame.where({ id }).first();
+  if (exame) {
+    res.json(exame);
+  } else {
+    res.status(400).send("Exame não existe!");
+  }
+});
+
+app.post("/exame", async (req: Request, res: Response) => {
+  const body = req.body;
+
+  const exame = await db.orm.public.Exame.create({
+    tipo_exame: body.tipo_exame,
+    valor: String(body.valor),
+    descricao: body.descricao,
+    resultado: body.resultado,
+    data_exame: body.data_exame,
+    paciente_id: body.paciente_id,
+  });
+
+  res.json({
+    mensagem: "Exame criado!",
+    data: exame,
+  });
+});
+
+app.put("/exames/:id", async (req: Request, res: Response) => {
+  const body = req.body;
+  const id = Number(req.params.id);
+
+  const exame = await db.orm.public.Exame.where({ id }).update({
+    tipo_exame: body.tipo_exame,
+    valor: String(body.valor),
+    descricao: body.descricao,
+    resultado: body.resultado,
+    data_exame: body.data_exame,
+    paciente_id: body.paciente_id,
+  });
+  if (exame) {
+    res.json({
+      mensagem: "Exame atualizado com sucesso!",
+      data: exame,
+    });
+  } else {
+    res.status(400).send("Exame não encontrado!");
+  }
+});
+
+app.delete("/exames/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const exame = await db.orm.public.Exame.where({ id }).delete();
+  if (exame) {
+    res.json({
+      mensagem: "Exame deletado",
+      data: exame,
+    });
+  } else {
+    res.status(400).send("Exame não existe!");
+  }
+});
+
+app.get("/pacientes", async (req: Request, res: Response) => {
+    const pagina = Number(req.query.pagina);
+  const limite = Number(req.query.limite) || 10;
+  const pacientes = await db.orm.public.Paciente.select(
+    "id",
+    "nome",
+    "cpf",
+    "telefone",
+    "email",
+    "data_nascimento",
+    "sexo",
+    "alergia",
+    "cirurgia",
+    "peso",
+    "altura",
+  )
+  .orderBy([(p) => p.nome.asc(), (p) => p.id.desc()])
+  .limit(limite)
+  .offset((pagina - 1) * limite)
+  .all();
+
+  const totalPacientes = await db.orm.public.Paciente.aggregate((paciente) => ({
+    total: paciente.count(),
+  }));
+  const totalPaginas = Math.ceil(totalPacientes.total / limite);
+
+  res.json({
+    pacientes,
+    totalPacientes: totalPacientes.total,
+    totalPaginas,
+    paginaAtual: pagina,
+  });
+});
+
+app.get("/pacientes/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const paciente = await db.orm.public.Paciente.where({ id })
+    .include("exame")
+    .first();
+  if (paciente) {
+    res.json(paciente);
+  } else {
+    res.status(400).send("Paciente não existe!");
+  }
+});
+
+app.post("/paciente", async (req: Request, res: Response) => {
+  const body = req.body;
+
+  const paciente = await db.orm.public.Paciente.create({
+    nome: body.nome,
+    cpf: body.cpf,
+    telefone: body.telefone,
+    email: body.email,
+    data_nascimento: body.data_nascimento,
+    sexo: body.sexo,
+    alergia: body.alergia,
+    cirurgia: body.cirurgia,
+    peso: String(body.peso),
+    altura: body.altura,
+  });
+
+  res.json({
+    mensagem: "Paciente criado!",
+    data: paciente,
+  });
+});
+
+app.put("/pacientes/:id", async (req: Request, res: Response) => {
+  const body = req.body;
+  const id = Number(req.params.id);
+
+  const paciente = await db.orm.public.Paciente.where({ id }).update({
+    nome: body.nome,
+    cpf: body.cpf,
+    telefone: body.telefone,
+    email: body.email,
+    data_nascimento: body.data_nascimento,
+    sexo: body.sexo,
+    alergia: body.alergia,
+    cirurgia: body.cirurgia,
+    peso: String(body.peso),
+    altura: body.altura,
+  });
+  if (paciente) {
+    res.json({
+      mensagem: "Paciente atualizado com sucesso!",
+      data: paciente,
+    });
+  } else {
+    res.status(400).send("Paciente não encontrado!");
+  }
+});
+
+app.delete("/pacientes/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const paciente = await db.orm.public.Paciente.where({ id }).delete();
+  if (paciente) {
+    res.json({
+      mensagem: "Paciente deletado",
+      data: paciente,
+    });
+  } else {
+    res.status(400).send("Paciente não existe!");
+  }
+});
+
+app.get("/consultas", async (req: Request, res: Response) => {
+  const pagina = Number(req.query.pagina);
+  const limite = Number(req.query.limite) || 10;
+  const consultas = await db.orm.public.Consulta.select(
+    "id",
+    "motivo",
+    "data_consulta",
+    "observacoes",
+    "medico_responsavel_id",
+    "paciente_id",
+  )
+    .orderBy([(c) => c.data_consulta.desc(), (c) => c.id.desc()])
+    .limit(limite)
+    .offset((pagina - 1) * limite)
+    .all();
+
+  const totalConsultas = await db.orm.public.Consulta.aggregate((consulta) => ({
+    total: consulta.count(),
+  }));
+  const totalPaginas = Math.ceil(totalConsultas.total / limite);
+
+  res.json({
+    consultas,
+    totalConsultas: totalConsultas.total,
+    totalPaginas,
+    paginaAtual: pagina || 1,
+  });
+});
+
+app.get("/consultas/busca", async (req: Request, res: Response) => {
+  const { data, paciente } = req.query;
+  let consultas = db.orm.public.Consulta.select(
+    "id",
+    "motivo",
+    "data_consulta",
+    "observacoes",
+    "medico_responsavel_id",
+    "paciente_id",
+  )
+    .include("paciente")
+    .include("medico_responsavel", (medico) => medico.select("name", "email"));
+
+  if (data) {
+    const valor = String(data);
+    if (valor.includes("T")) {
+      consultas = consultas.where((c) => c.data_consulta.eq(valor));
+    } else {
+      const inicio = new Date(`${valor}T00:00:00.000Z`);
+      if (isNaN(inicio.getTime()))
+        return res.status(400).send("Data inválida!");
+
+      const fim = new Date(inicio);
+      fim.setUTCDate(fim.getUTCDate() + 1);
+
+      consultas = consultas.where((c) =>
+        c.data_consulta.gte(inicio.toISOString()),
+      );
+      consultas = consultas.where((c) => c.data_consulta.lt(fim.toISOString()));
+    }
+  }
+
+  if (paciente) {
+    const nome = String(paciente);
+    consultas = consultas.where((c) =>
+      c.paciente.some((p) => p.nome.ilike(`%${nome}%`)),
+    );
+  }
+
+  res.json(await consultas.all());
+});
+
+app.get("/consultas/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const consulta = await db.orm.public.Consulta.where({ id })
+    .include("paciente")
+    .include("medico_responsavel", (medico) => medico.select("name", "email"))
+    .first();
+  if (consulta) {
+    res.json(consulta);
+  } else {
+    res.status(400).send("Consulta não existe!");
+  }
+});
+
+app.post("/consulta", async (req: Request, res: Response) => {
+  const body = req.body;
+
+  const consulta = await db.orm.public.Consulta.create({
+    motivo: body.motivo,
+    data_consulta: body.data_consulta,
+    observacoes: body.observacoes,
+    medico_responsavel_id: body.medico_responsavel_id,
+    paciente_id: body.paciente_id,
+  });
+
+  res.json({
+    mensagem: "Consulta criada!",
+    data: consulta,
+  });
+});
+
+app.put("/consultas/:id", async (req: Request, res: Response) => {
+  const body = req.body;
+  const id = Number(req.params.id);
+
+  const consulta = await db.orm.public.Consulta.where({ id }).update({
+    motivo: body.motivo,
+    data_consulta: body.data_consulta,
+    observacoes: body.observacoes,
+    medico_responsavel_id: body.medico_responsavel_id,
+    paciente_id: body.paciente_id,
+  });
+  if (consulta) {
+    res.json({
+      mensagem: "Consulta atualizada com sucesso!",
+      data: consulta,
+    });
+  } else {
+    res.status(400).send("Consulta não encontrada!");
+  }
+});
+
+app.delete("/consultas/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const consulta = await db.orm.public.Consulta.where({ id }).delete();
+  if (consulta) {
+    res.json({
+      mensagem: "Consulta deletada",
+      data: consulta,
+    });
+  } else {
+    res.status(400).send("Consulta não existe!");
+  }
+});
+
+app.get("/prontuarios", async (_: Request, res: Response) => {
+  const prontuarios = await db.orm.public.Prontuario.select(
+    "id",
+    "descricao",
+    "data",
+    "medico_responsavel_id",
+    "paciente_id",
+  ).all();
+
+  res.json(prontuarios);
+});
+
+app.get("/prontuarios/busca", async (req: Request, res: Response) => {
+  const { paciente, medico } = req.query;
+  let prontuarios = db.orm.public.Prontuario.select(
+    "id",
+    "descricao",
+    "data",
+    "medico_responsavel_id",
+    "paciente_id",
+  )
+    .include("paciente")
+    .include("medico_responsavel", (medico) => medico.select("name", "email"));
+
+  if (paciente) {
+    const nome = String(paciente);
+    prontuarios = prontuarios.where((p) =>
+      p.paciente.some((pac) => pac.nome.ilike(`%${nome}%`)),
+    );
+  }
+
+  if (medico) {
+    const nome = String(medico);
+    prontuarios = prontuarios.where((p) =>
+      p.medico_responsavel.some((u) => u.name.ilike(`%${nome}%`)),
+    );
+  }
+
+  res.json(await prontuarios.all());
+});
+
+app.get("/prontuarios/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const prontuario = await db.orm.public.Prontuario.where({ id })
+    .include("paciente")
+    .include("medico_responsavel", (medico) => medico.select("name", "email"))
+    .first();
+  if (prontuario) {
+    res.json(prontuario);
+  } else {
+    res.status(400).send("Prontuário não existe!");
+  }
+});
+
+app.post("/prontuario", async (req: Request, res: Response) => {
+  const body = req.body;
+
+  const prontuario = await db.orm.public.Prontuario.create({
+    descricao: body.descricao,
+    data: body.data,
+    medico_responsavel_id: body.medico_responsavel_id,
+    paciente_id: body.paciente_id,
+  });
+
+  res.json({
+    mensagem: "Prontuário criado!",
+    data: prontuario,
+  });
+});
+
+app.put("/prontuarios/:id", async (req: Request, res: Response) => {
+  const body = req.body;
+  const id = Number(req.params.id);
+
+  const prontuario = await db.orm.public.Prontuario.where({ id }).update({
+    descricao: body.descricao,
+    data: body.data,
+    medico_responsavel_id: body.medico_responsavel_id,
+    paciente_id: body.paciente_id,
+  });
+  if (prontuario) {
+    res.json({
+      mensagem: "Prontuário atualizado com sucesso!",
+      data: prontuario,
+    });
+  } else {
+    res.status(400).send("Prontuário não encontrado!");
+  }
+});
+
+app.delete("/prontuarios/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const prontuario = await db.orm.public.Prontuario.where({ id }).delete();
+  if (prontuario) {
+    res.json({
+      mensagem: "Prontuário deletado",
+      data: prontuario,
+    });
+  } else {
+    res.status(400).send("Prontuário não existe!");
+  }
+});
+
+// Módulo de Gestão de Estoque (rotas protegidas pelo middleware auth).
+// Consumido pelo front-end em src/api/api.ts (token JWT no cabeçalho Authorization).
+app.use("/estoque", criarRotasEstoque(criarEstoqueService(estoqueRepositoryPrisma)));
+
+app.listen(3000, () => {
+  console.log("Rodando em http://localhost:3000");
+});

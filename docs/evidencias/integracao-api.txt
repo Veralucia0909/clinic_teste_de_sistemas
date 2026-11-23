@@ -1,0 +1,18 @@
+1) Login (POST /login)
+   token recebido: eyJhbGciOiJIUzI1NiIs...
+2) Estoque sem token (esperado 401)
+{"error":"missing token"}  [HTTP 401]
+3) Cadastrar item (esperado 201)
+{"mensagem":"Item cadastrado no estoque!","data":{"categoria":"MATERIAL","data_validade":null,"estoque_minimo":10,"id":6,"nome":"Gaze estéril","quantidade":5,"unidade":"pacote"}}  [HTTP 201]
+4) Cadastrar o mesmo item de novo (esperado 409)
+{"error":"Já existe o item \"Gaze estéril\" no estoque. Registre uma entrada nele em vez de cadastrar outro."}  [HTTP 409]
+5) Entrada de 20 (esperado 201, saldo 25)
+{"mensagem":"Entrada registrada!","data":{"item":{"categoria":"MATERIAL","data_validade":null,"estoque_minimo":10,"id":6,"nome":"Gaze estéril","quantidade":25,"unidade":"pacote"},"movimentacao":{"data":"2026-11-22 22:54:51.02-03","id":4,"item_id":6,"motivo":"Compra NF 8890","quantidade":20,"saldo_anterior":5,"saldo_atual":25,"tipo":"ENTRADA","usuario_id":1}}}  [HTTP 201]
+6) Saída de 30 (esperado 422)
+{"error":"Estoque insuficiente: saldo de 25 pacote, saída solicitada de 30."}  [HTTP 422]
+7) Inventário: contagem física 24 (esperado diferença -1)
+{"mensagem":"Inventário conferido!","data":{"item":{"categoria":"MATERIAL","data_validade":null,"estoque_minimo":10,"id":6,"nome":"Gaze estéril","quantidade":24,"unidade":"pacote"},"movimentacao":{"data":"2026-11-22 22:54:51.039-03","id":5,"item_id":6,"motivo":"Inventário mensal","quantidade":1,"saldo_anterior":25,"saldo_atual":24,"tipo":"AJUSTE","usuario_id":1},"diferenca":-1}}  [HTTP 200]
+8) Histórico de movimentações
+[{"data":"2026-11-22 22:54:51.039-03","id":5,"item_id":6,"motivo":"Inventário mensal","quantidade":1,"saldo_anterior":25,"saldo_atual":24,"tipo":"AJUSTE","usuario_id":1},{"data":"2026-11-22 22:54:51.02-03","id":4,"item_id":6,"motivo":"Compra NF 8890","quantidade":20,"saldo_anterior":5,"saldo_atual":25,"tipo":"ENTRADA","usuario_id":1}]
+9) Login com senha errada (esperado 401, sem erro no servidor)
+{"message":"Senha incorreta!"}  [HTTP 401]

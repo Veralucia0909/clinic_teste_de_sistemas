@@ -1,0 +1,81 @@
+PASS src/components/StockMovementForm/__tests__/StockMovementForm.test.tsx
+  StockMovementForm
+    ✓ CT-F14: mostra as mensagens de erro e não chama a API com o formulário vazio (80 ms)
+    ✓ CT-F15: bloqueia saída maior que o saldo antes de chamar a API (153 ms)
+    ✓ CT-F16: entrada válida chama POST /estoque/itens/:id/entrada e avisa a página (147 ms)
+    ✓ CT-F17: saída válida chama POST /estoque/itens/:id/saida e limpa o formulário (123 ms)
+    ✓ CT-F18: erro devolvido pela API aparece para o usuário e a página não é avisada (90 ms)
+
+PASS src/components/LoginForm/__tests__/LoginForm.test.tsx
+  LoginForm integrado à API
+    ✓ CT-F26: login válido guarda os tokens da API e entra no sistema (135 ms)
+    ✓ CT-F27: senha errada (401 da API) mostra mensagem e não guarda tokens (100 ms)
+
+PASS src/components/StockList/__tests__/StockList.test.tsx
+  StockList
+    ✓ CT-F09: mostra todos os itens com saldo e situação (18 ms)
+    ✓ CT-F10: exibe alerta com a quantidade de itens para reposição (9 ms)
+    ✓ CT-F11: não exibe alerta quando todos os itens estão normais (3 ms)
+    ✓ CT-F12: a busca pelo nome filtra a lista (34 ms)
+    ✓ CT-F13: o filtro de categoria filtra a lista e mostra mensagem quando não há resultado (33 ms)
+
+PASS src/pages/Estoque/__tests__/Estoque.test.tsx
+  Página Estoque
+    ✓ CT-F19: carrega os itens pela API (GET /estoque/itens) ao abrir a página (28 ms)
+    ✓ CT-F20: mostra aviso quando a API está fora do ar (10 ms)
+
+PASS src/api/__tests__/api.test.ts
+  api.ts
+    ✓ CT-F23: aponta para o backend na porta 3000
+    ✓ CT-F24: envia o token JWT do login no cabeçalho Authorization
+    ✓ CT-F25: sem login, a requisição sai sem cabeçalho Authorization
+    ✓ CT-F28: resposta de sucesso passa direto e erro que não é token expirado chega à tela
+
+PASS src/components/PatientList/__tests__/PatientList.test.tsx
+  PatientList (componente existente)
+    ✓ CT-F21: lista paciente com data de nascimento e calcula a idade (11 ms)
+    ✓ CT-F22 (DEF-01): paciente sem data de nascimento quebra a lista — falha confirmada (19 ms)
+
+PASS src/utils/__tests__/estoque.test.ts
+  getStockStatus
+    ✓ CT-F01: classifica SEM_ESTOQUE, BAIXO (inclusive no limite) e OK
+  filterStockItems e countLowStock
+    ✓ CT-F02: filtra pelo nome sem diferenciar maiúsculas
+    ✓ CT-F03: filtra por categoria e combina com a busca
+    ✓ CT-F04: conta os itens que precisam de reposição
+  validateMovement
+    ✓ CT-F05: aceita uma saída válida dentro do saldo (1 ms)
+    ✓ CT-F06: exige item, quantidade inteira positiva e motivo
+    ✓ CT-F07: bloqueia saída maior que o saldo, mas permite entrada de qualquer valor
+  Integração com a API
+    ✓ CT-F08: monta a rota da API de entrada/saída e lê a mensagem de erro da API (1 ms)
+
+------------------------------|---------|----------|---------|---------|---------------------
+File                          | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s   
+------------------------------|---------|----------|---------|---------|---------------------
+All files                     |   89.39 |    90.47 |   86.11 |   88.61 |                     
+ api                          |   61.11 |    66.66 |      75 |   61.11 |                     
+  api.ts                      |   61.11 |    66.66 |      75 |   61.11 | 21,29-34            
+ components/LoginForm         |   78.12 |    66.66 |   55.55 |   78.12 |                     
+  index.tsx                   |   78.12 |    66.66 |   55.55 |   78.12 | 24,50,63-64,130-149 
+ components/StockList         |     100 |    83.33 |     100 |     100 |                     
+  index.tsx                   |     100 |    83.33 |     100 |     100 | 38                  
+ components/StockMovementForm |     100 |      100 |     100 |     100 |                     
+  index.tsx                   |     100 |      100 |     100 |     100 |                     
+ pages/Estoque                |     100 |       75 |     100 |     100 |                     
+  index.tsx                   |     100 |       75 |     100 |     100 | 13                  
+ utils                        |     100 |      100 |     100 |     100 |                     
+  estoque.ts                  |     100 |      100 |     100 |     100 |                     
+------------------------------|---------|----------|---------|---------|---------------------
+
+=============================== Coverage summary ===============================
+Statements   : 89.39% ( 118/132 )
+Branches     : 90.47% ( 57/63 )
+Functions    : 86.11% ( 31/36 )
+Lines        : 88.61% ( 109/123 )
+================================================================================
+Test Suites: 7 passed, 7 total
+Tests:       28 passed, 28 total
+Snapshots:   0 total
+Time:        2.088 s, estimated 3 s
+Ran all test suites.

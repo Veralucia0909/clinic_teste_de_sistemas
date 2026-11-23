@@ -1,0 +1,12 @@
+src/components/PatientList/index.tsx(40,36): error TS18048: 'birthdate' is possibly 'undefined'.
+src/components/PrivateRoute/index.tsx(7,1): error TS6133: 'toast' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(10,1): error TS6133: 'IMaskInput' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(106,10): error TS6133: 'isSaving' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(110,9): error TS6133: 'handleInputChange' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(124,10): error TS6133: 'handleMaskedChange' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(137,10): error TS6133: 'handleAddressChange' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(156,5): error TS2552: Cannot find name 'Promisse'. Did you mean 'Promise'?
+src/components/RegisterFormPatient/index.tsx(191,9): error TS6133: 'handleCepBlur' is declared but its value is never read.
+src/components/RegisterFormPatient/index.tsx(203,9): error TS6133: 'handleSubmit' is declared but its value is never read.
+src/context/AuthContext.tsx(1,54): error TS1484: 'ReactNode' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
+src/layouts/SideMenu/index.tsx(3,19): error TS6133: 'Link' is declared but its value is never read.

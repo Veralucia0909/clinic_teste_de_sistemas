@@ -1,0 +1,60 @@
+PASS src/estoque/__tests__/estoque.service.test.ts
+  Validação de novo item (validarNovoItem)
+    ✓ CT-B01: aceita um item com todos os dados válidos (1 ms)
+    ✓ CT-B02: rejeita item sem nome, com categoria inválida e sem unidade
+    ✓ CT-B03: rejeita estoque mínimo negativo ou decimal e quantidade negativa
+    ✓ CT-B04: rejeita data de validade em formato inválido
+  Situação do estoque e alertas
+    ✓ CT-B05: classifica o item como SEM_ESTOQUE, BAIXO ou OK (1 ms)
+    ✓ CT-B06: lista só os itens que precisam de reposição, do mais crítico ao menos crítico
+    ✓ CT-B07: aponta itens vencidos ou que vencem nos próximos 30 dias
+  Cadastro de item (criarItem)
+    ✓ CT-B08: cadastra item válido com nome limpo e quantidade inicial (2 ms)
+    ✓ CT-B09: bloqueia cadastro duplicado (evita compras duplicadas) (1 ms)
+    ✓ CT-B10: não acessa o banco quando os dados são inválidos (1 ms)
+  Entrada e saída de itens
+    ✓ CT-B11: entrada soma ao saldo e registra a movimentação (rastreabilidade) (1 ms)
+    ✓ CT-B12: entrada com quantidade zero, negativa ou decimal é rejeitada (16 ms)
+    ✓ CT-B13: saída subtrai do saldo e registra a movimentação
+    ✓ CT-B14: saída maior que o saldo é bloqueada (estoque nunca fica negativo) (1 ms)
+    ✓ CT-B15: saída de todo o saldo é permitida (valor limite)
+    ✓ CT-B16: movimentação de item inexistente retorna 404 (1 ms)
+    ✓ CT-B17: exige motivo e usuário responsável em toda movimentação
+  Inventário (divergência entre estoque físico e sistema)
+    ✓ CT-B18: ajusta o saldo para a contagem física e informa a diferença (1 ms)
+    ✓ CT-B19: não gera movimentação quando a contagem bate com o sistema
+  Listagens
+    ✓ CT-B20: listarItens devolve cada item com a sua situação
+    ✓ CT-B21: normalizarNome ignora espaços extras e maiúsculas
+
+PASS src/estoque/__tests__/estoque.routes.test.ts
+  Rotas /estoque
+    ✓ CT-B22: GET /estoque/itens retorna os itens com a situação calculada (18 ms)
+    ✓ CT-B23: GET /estoque/alertas lista os itens para reposição (4 ms)
+    ✓ CT-B24: POST /estoque/itens cadastra item válido (201) (9 ms)
+    ✓ CT-B25: POST /estoque/itens com dados inválidos responde 400 (3 ms)
+    ✓ CT-B26: POST /estoque/itens com nome repetido responde 409 (3 ms)
+    ✓ CT-B27: entrada e saída atualizam o saldo e ficam no histórico (7 ms)
+    ✓ CT-B28: saída maior que o saldo responde 422 e não altera o estoque (4 ms)
+    ✓ CT-B29: inventário corrige divergência e item inexistente responde 404 (10 ms)
+    ✓ CT-B30: erro inesperado do banco responde 500 sem expor detalhes (3 ms)
+
+--------------------|---------|----------|---------|---------|-------------------
+File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+--------------------|---------|----------|---------|---------|-------------------
+All files           |      96 |    96.77 |     100 |   95.76 |                   
+ estoque.routes.ts  |   92.68 |      100 |     100 |   92.68 | 30,49,74          
+ estoque.service.ts |   97.61 |    96.66 |     100 |    97.4 | 167,183           
+--------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 96% ( 120/125 )
+Branches     : 96.77% ( 60/62 )
+Functions    : 100% ( 32/32 )
+Lines        : 95.76% ( 113/118 )
+================================================================================
+Test Suites: 2 passed, 2 total
+Tests:       30 passed, 30 total
+Snapshots:   0 total
+Time:        0.779 s, estimated 2 s
+Ran all test suites.
